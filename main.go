@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"image/jpeg"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -73,6 +75,19 @@ func main() {
 		}
 		renderTitle("Compressed File Info")
 		renderFileInfo(compressFile)
+	case ".png":
+		originalFile, err := GetFileInfo(FILENAME)
+		if err != nil {
+			renderError(err.Error())
+		}
+		renderTitle("Original File Info")
+		renderFileInfo(originalFile)
+		compressFile, err := compressPNG(FILENAME)
+		if err != nil {
+			fmt.Println(err)
+		}
+		renderTitle("Compressed File Info")
+		renderFileInfo(compressFile)
 	}
 }
 
@@ -83,7 +98,6 @@ func compressPDF(FILENAME string) (FileInfo, error) {
 	}
 	defer file.Close()
 
-
 	FILENAME = strings.Replace(FILENAME, ".pdf", ".gz", -1)
 	compressedFILE, err := os.Create("compressed_" + FILENAME)
 	if err != nil {
@@ -91,14 +105,13 @@ func compressPDF(FILENAME string) (FileInfo, error) {
 	}
 	defer compressedFILE.Close()
 
+	gzipWriter := gzip.NewWriter(compressedFILE)
+	defer gzipWriter.Close()
 
-    gzipWriter := gzip.NewWriter(compressedFILE)
-    defer gzipWriter.Close()
-
-    _, err = io.Copy(gzipWriter, bufio.NewReader(file))
-    if err != nil {
-        return FileInfo{}, err
-    }
+	_, err = io.Copy(gzipWriter, bufio.NewReader(file))
+	if err != nil {
+		return FileInfo{}, err
+	}
 
 	compressedFILEStat, err := compressedFILE.Stat()
 	if err != nil {
@@ -136,6 +149,58 @@ func compressJPEG(FILENAME string) (FileInfo, error) {
 
 	err = jpeg.Encode(compressedFILE, img, &jpeg.Options{Quality: 70})
 
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	compressedFILEStat, err := compressedFILE.Stat()
+
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	compressedFILEINFO := FileInfo{
+		name:     "compressed_" + FILENAME,
+		size:     compressedFILEStat.Size(),
+		filetype: filepath.Ext(FILENAME),
+	}
+
+	return compressedFILEINFO, nil
+}
+
+/* compresses the provided jpeg file */
+func compressPNG(FILENAME string) (FileInfo, error) {
+	file, err := os.Open(FILENAME)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	defer file.Close()
+
+	img, err := png.Decode(file)
+
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	var buf bytes.Buffer
+	err = png.Encode(&buf, img)
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	compressImg, err := png.Decode(&buf)
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	compressedFILE, err := os.Create("compressed_" + FILENAME)
+
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	defer compressedFILE.Close()
+	err = png.Encode(compressedFILE, compressImg)
 	if err != nil {
 		return FileInfo{}, err
 	}
